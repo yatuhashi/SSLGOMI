@@ -6,99 +6,83 @@ import (
     "time"
     "runtime"
     "flag"
-//    "strconv"
 )
 
-func loopconnection(name string,i int,loop bool,success ,failed  chan int) {
-    keep_alive := "GET / HTTP/1.1\r\n Connection: keep-alive\r\n"
-    message := []byte(keep_alive)
-    ip := "10.14.6.35"
-    key :=  [32]byte{}
-    copy(key[:],ip)
-
+func loopconnection(name string,i int,loop bool,result chan int) {
     log.SetFlags(log.Lshortfile)
     conf := &tls.Config{
         InsecureSkipVerify: true,
         SessionTicketsDisabled: false,
         ServerName: name,
-        SessionTicketKey: key,
     }
-//   sessioncache := tls.NewLRUClientSessionCache(1)
-//   clientsessionstate := make([]tls.ClientSessionState, 1)
-//   sessionkey := name+strconv.Itoa(i)
-//   fmt.Println(sessionkey)
-//   sessioncache.Put(sessionkey, &clientsessionstate[i])
-//    fmt.Println(sessioncache.Get(sessionkey))
-      for loop {
+    for j :=0; j<1 || loop; j++{
             conn, err := tls.Dial("tcp", name, conf)
-            defer conn.Close()
             if err != nil {
                 fmt.Println("error",i)
                 log.Println(err)
-                tmp := <-failed
-                failed <- tmp+1
-                return
+                result <-1
+                continue
             }else{
-                tmp := <-success
-                success <-tmp+1
+                result <-0
             //待機時間をつくり同時アクティブセッション数を増やす
             //    time.Sleep(30000 * time.Millisecond)
             }
-            //送信データ
-            n, err := conn.Write(message)
-            if err != nil {
-                log.Println(n, err)
-                return
-            }
-      }
-/*
-    buf := make([]byte, 1000)
-    n, err = conn.Read(buf)
-    if err != nil {
-        println("failed recieve")
-        log.Println(n, err)
-        return
+            conn.Close()
     }
-    println("------------------")
-    println(string(buf[:n]))
-*/
-
 }
 
-func recieving(success, failed chan int){
-    success <-0
-    failed  <-0
-    for {
-        select{//ひたすら受け取る
-        case s := <-success:
-            if s%2 == 1{
-               println(s)
-            }
-        case f := <-failed:
-            if f%2 == 1{
-               println(f)
-            }
+func recieving(result chan int,loop bool,num int){
+    success := 0
+    failed  := 0
+    all := 0.0
+    s := time.Now()
+
+    for loop {
+        r := <-result
+        all = all+1
+        if r == 0 {
+            success = success+ 1
+        }
+        if int(all)%1000==0 {
+            fmt.Println("all:",all,"Suc:",success,"q/s:",1000/time.Now().Sub(s).Seconds())
+            s = time.Now()
         }
     }
+    for i :=0; i<num; i++{
+        r := <-result
+        if r == 0 {
+            success = success+ 1
+        }else{
+            failed = failed + 1
+        }
+    }
+    fmt.Println("Success :",success, "Failed : ",failed)
 }
 
 func main(){
+  fmt.Println("Please wait 5s....")
+  ip := flag.String("i", "127.0.0.1:443", "dst server ip address(default 127.0.0.1:443)")
   num := flag.Int("n", 1, "process num")
-  loop := flag.Bool("l", false, "loop")
+  loop := flag.Bool("l", false, "loop flag")
   flag.Parse()
-  success := make(chan int)
-  failed  := make(chan int)
-  go recieving(success,failed)
+  result := make(chan int)
 
-  for j :=0; j<1000; j++{
-    t := time.Now()
-    for i :=0; i<*num; i++{//通信プロセスの作成
-       go loopconnection("10.14.6.35:443",i,*loop,success,failed)
-    }
-    f := time.Now()
-    fmt.Println(f.Sub(t))//すべての通信プロセスの作成にかかった時間
-    log.Println(runtime.NumGoroutine())
-    time.Sleep(2000 * time.Millisecond)//mainプロセスを待機させておく
+  go recieving(result,*loop,*num)
+
+  t := time.Now()
+  for i :=0; i<*num; i++{//通信プロセスの作成
+     go loopconnection(*ip,i,*loop,result)
+  }
+  f := time.Now()
+  //通信プロセスの作成時間
+  fmt.Println("Create process time: ",f.Sub(t))
+  //現在動いてるプロセス数
+  fmt.Println("Current Process num: ",runtime.NumGoroutine())
+  //mainプロセスを待機させておく
+  time.Sleep(3 * time.Second)
+  for runtime.NumGoroutine() > 2{
+     time.Sleep(1 * time.Second)
+     fmt.Println("Current Process num: ",runtime.NumGoroutine())
   }
 }
 
