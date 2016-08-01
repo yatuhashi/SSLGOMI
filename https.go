@@ -100,7 +100,7 @@ func main(){
   fmt.Println("Current Process num: ",runtime.NumGoroutine())
   //mainプロセスを待機させておく
   time.Sleep(3 * time.Second)
-  for runtime.NumGoroutine() > *num*3+2{
+  for runtime.NumGoroutine() > *num*3+2 || *loop{
      time.Sleep(1 * time.Second)
   }
 }
