@@ -8,21 +8,34 @@ import (
     "flag"
     "io/ioutil"
     "net/http"
-//    "io"
-//    "golang.org/x/net/http2"
-//    "os"
-//    "strconv"
 )
 
+/****************************************
+大量のHTTPSリクエストを生み出すコード
+メソッドGet
+宛先設定
+プロセス数設定
+無限ループ設定
+楕円曲線暗号設定
+body閲覧設定
+
+[Example]
+./htlc -i 127.0.0.1 -s
+./htlc -i 127.0.0.1 -n 65000
+./htlc -i 127.0.0.1 -n 500 -l
+
+宛先サーバの性能によるが秒間２万リクエスト以上を記録
+*****************************************/
+
 func HttpsClient(ecdh bool) *http.Transport{
-    var tr = &http.Transport{
+    var tr = &http.Transport{//デフォルト設定
             TLSHandshakeTimeout: 1 * time.Second,
             MaxIdleConnsPerHost: 65000,
             TLSClientConfig: &tls.Config{
                 InsecureSkipVerify: true,
             },
     }
-    if ecdh {
+    if ecdh {//楕円曲線暗号のみを使用する場合
            tr = &http.Transport{
                    TLSHandshakeTimeout: 1 * time.Second,
                    MaxIdleConnsPerHost: 65000,
@@ -39,11 +52,13 @@ func HttpsClient(ecdh bool) *http.Transport{
 }
 
 func connect(URL string,i int,loop ,show ,ecdh bool,result chan int) {
+    //tls設定作成
     tr := HttpsClient(ecdh)
+    //クライアント作成
     hc := &http.Client{Transport: tr}
     for j :=0; j<1 || loop; j++ {//デフォ１回、または無限ループする
             req, _ := http.NewRequest("GET", URL, nil)
-            resp, err := hc.Do(req)
+            resp, err := hc.Do(req)//実際にリクエストを投げる
             if err != nil {
                 //失敗した時
                 log.Println(err)
@@ -61,6 +76,7 @@ func connect(URL string,i int,loop ,show ,ecdh bool,result chan int) {
                     fmt.Printf("%s", body)
                 }
             }
+            //使用していないコネクションを終了させる
             tr.CloseIdleConnections()
     }
 
@@ -116,10 +132,12 @@ func main(){
   //現在動いてるプロセス数
   fmt.Println("Current Process num: ",runtime.NumGoroutine())
   //mainプロセスを待機させておく
-  time.Sleep(3 * time.Second)
+  time.Sleep(3 * time.Second)//プロセス作成時間分待機
+  //プロセスが残ってるうちは待機
   for runtime.NumGoroutine() > 4 || *loop{
      time.Sleep(1 * time.Second)
   }
+  //終了時のプロセス数
   fmt.Println("Current Process num: ",runtime.NumGoroutine())
 }
 
